@@ -105,7 +105,7 @@ def main():
 
                 # Start with initial questions
                 st.session_state.initial_questions = initiate_questions()
-
+# yes i've done 3 internships in full stack development
     # Ask questions based on resume and user responses
     if st.session_state.conversation:
         # Ask the first question

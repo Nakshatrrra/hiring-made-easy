@@ -61,7 +61,7 @@ def main():
 
     # Hardcoded description (You can modify this)
     hardcoded_description = """
-    Full-stack developer with experience in AI, ML, backend technologies, and modern web development frameworks.
+    Full-stack developer with experience in backend technologies, and modern web development frameworks.
     Expertise in Python, JavaScript, Node.js, and React.js. Seeking opportunities to leverage these skills.
     """
 
