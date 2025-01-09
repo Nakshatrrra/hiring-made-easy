@@ -189,12 +189,16 @@ def main():
             st.session_state.current_question = st.session_state.initial_questions.pop(0)
             st.write(bot_template.replace("{{MSG}}", st.session_state.current_question), unsafe_allow_html=True)
 
+        # Audio recording section
         st.write("Record your answer:")
+        # Initialize the audio recorder
         recorder = audiorecorder("Click to record", "Recording...")
         
+        # Get the audio data
         audio_data = recorder
         
         if len(audio_data) > 0:
+            # Play the recorded audio
             st.audio(audio_data.export().read())
             
             try:
