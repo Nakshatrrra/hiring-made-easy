@@ -8,7 +8,6 @@ from langchain.vectorstores import FAISS
 from langchain.chat_models import ChatOpenAI
 from langchain.memory import ConversationBufferMemory
 from langchain.chains import ConversationalRetrievalChain
-from langchain.prompts import PromptTemplate
 from htmlTemplates import css, bot_template, user_template
 
 # Load environment variables
@@ -67,13 +66,35 @@ def initiate_questions():
     ]
     return initial_questions
 
-# Function to handle user input and generate follow-up questions
-def handle_resume_interaction(user_response, conversation_chain):
-    # Process the user's answer and ask a follow-up question
-    follow_up_response = conversation_chain({'question': user_response})
-    return follow_up_response['chat_history']
+# Function to score user responses using ChatOpenAI
+def score_response(question, user_response):
+    scoring_prompt = f"""
+    You are an expert interviewer. Score the candidate's response to the following question on a scale of 0 to 1, where:
+    - 1 means the response is absolutely good according to the question for a basic inteview.
+    - 0 means the response is entirely incorrect, irrelevant, or unhelpful.
+    
+    Question: {question}
+    Response: {user_response}
+    
+    Provide only the score as output.
+    """
+    llm = ChatOpenAI(
+        openai_api_key=openai_api_key,
+        temperature=0,
+        model="gpt-4"
+    )
+    score = llm.predict(scoring_prompt)
+    return float(score.strip())
 
-# Main function to handle the Streamlit app
+def handle_resume_interaction(question, user_response, conversation_chain):
+    follow_up_response = conversation_chain({'question': user_response})
+    score = score_response(question, user_response)
+    return follow_up_response['chat_history'], score
+
+# Check if more questions are available
+def continue_conversation():
+    return len(st.session_state.initial_questions) > 0
+
 def main():
     load_dotenv()
     st.set_page_config(page_title="Interactive Resume Q&A", page_icon=":memo:")
@@ -85,6 +106,8 @@ def main():
         st.session_state.chat_history = None
     if "initial_questions" not in st.session_state:
         st.session_state.initial_questions = None
+    if "current_question" not in st.session_state:
+        st.session_state.current_question = None
 
     st.header("Interactive Resume Q&A :memo:")
 
@@ -94,7 +117,6 @@ def main():
         resume_pdf = st.file_uploader("Upload your resume PDF", accept_multiple_files=False)
         if st.button("Process Resume"):
             with st.spinner("Processing resume..."):
-                # Extract text from the resume
                 resume_text = get_pdf_text([resume_pdf])
                 text_chunks = get_text_chunks(resume_text)
                 vectorstore = get_vectorstore(text_chunks)
@@ -108,28 +130,33 @@ def main():
     # Ask questions based on resume and user responses
     if st.session_state.conversation:
         # Ask the first question
-        if st.session_state.initial_questions:
-            st.write(bot_template.replace("{{MSG}}", st.session_state.initial_questions[0]), unsafe_allow_html=True)
-            st.session_state.initial_questions.pop(0)
+        if st.session_state.initial_questions and not st.session_state.current_question:
+            st.session_state.current_question = st.session_state.initial_questions.pop(0)
+            st.write(bot_template.replace("{{MSG}}", st.session_state.current_question), unsafe_allow_html=True)
 
-        # Input field for user's answer
         user_answer = st.text_input("Your answer:")
         if user_answer:
-            # Handle user input and get follow-up
-            chat_history = handle_resume_interaction(user_answer, st.session_state.conversation)
+            chat_history, score = handle_resume_interaction(
+                st.session_state.current_question,
+                user_answer,
+                st.session_state.conversation
+            )
             st.session_state.chat_history = chat_history
 
-            # Display chat history
             for i, message in enumerate(st.session_state.chat_history):
                 if i % 2 == 0:
                     st.write(user_template.replace("{{MSG}}", message.content), unsafe_allow_html=True)
                 else:
                     st.write(bot_template.replace("{{MSG}}", message.content), unsafe_allow_html=True)
 
-            # Continue asking questions based on user's answer
-            if len(st.session_state.initial_questions) > 0:
-                st.write(bot_template.replace("{{MSG}}", st.session_state.initial_questions[0]), unsafe_allow_html=True)
-                st.session_state.initial_questions.pop(0)
+            st.write(f"**Score for your response:** {score:.2f}")
+
+            if continue_conversation():
+                st.session_state.current_question = st.session_state.initial_questions.pop(0)
+                st.write(bot_template.replace("{{MSG}}", st.session_state.current_question), unsafe_allow_html=True)
+            else:
+                st.session_state.current_question = None
+
 
 if __name__ == '__main__':
     main()
