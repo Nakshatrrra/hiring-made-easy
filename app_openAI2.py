@@ -66,12 +66,15 @@ def initiate_questions():
     ]
     return initial_questions
 
-def generate_new_question(chat_history):
+def generate_new_question(chat_history, job_description):
     prompt = f"""
-    You are an AI interviewer. Based on the following chat history, suggest a new, context-aware question that follows logically from the conversation:
+    You are an AI interviewer. Based on the following chat history and job description, suggest a new, context-aware question that follows logically from the conversation and switch topics in between if same topic question is asked for mmore than 3 times:
     
     Chat History:
     {chat_history}
+    
+    Job Description:
+    {job_description}
     
     Provide only the question as output.
     """
@@ -88,7 +91,7 @@ def generate_new_question(chat_history):
 def score_response(question, user_response):
     scoring_prompt = f"""
     You are an expert interviewer. Score the candidate's response to the following question on a scale of 0 to 1, where:
-    - 1 means the response is absolutely good according to the question for a basic inteview.
+    - 1 means the response is absolutely good according to the question for a basic interview.
     - 0 means the response is entirely incorrect, irrelevant, or unhelpful.
     
     Question: {question}
@@ -107,7 +110,6 @@ def score_response(question, user_response):
 def handle_resume_interaction(question, user_response, conversation_chain):
     follow_up_response = conversation_chain({'question': user_response})
     score = score_response(question, user_response)
-    # return score
     return follow_up_response['chat_history'], score
 
 # Check if more questions are available
@@ -133,6 +135,8 @@ def main():
     with st.sidebar:
         st.subheader("Your Resume")
         resume_pdf = st.file_uploader("Upload your resume PDF", accept_multiple_files=False)
+        st.subheader("Job Description")
+        job_description = st.text_area("Paste the job description here")
         if st.button("Process Resume"):
             with st.spinner("Processing resume..."):
                 resume_text = get_pdf_text([resume_pdf])
@@ -144,6 +148,7 @@ def main():
 
                 # Start with initial questions
                 st.session_state.initial_questions = initiate_questions()
+                st.session_state.job_description = job_description
 
     # Ask questions based on resume and user responses
     if st.session_state.conversation:
@@ -153,7 +158,7 @@ def main():
 
         user_answer = st.text_input("Your answer:")
         if user_answer:
-            chat_history,score = handle_resume_interaction(
+            chat_history, score = handle_resume_interaction(
                 st.session_state.current_question,
                 user_answer,
                 st.session_state.conversation
@@ -171,13 +176,12 @@ def main():
             if continue_conversation():
                 st.session_state.current_question = st.session_state.initial_questions.pop(0)
             else:
-                new_question = generate_new_question(st.session_state.chat_history)
+                new_question = generate_new_question(st.session_state.chat_history, st.session_state.job_description)
                 if new_question:
                     st.session_state.current_question = new_question
                 else:
                     st.session_state.current_question = None
             st.write(bot_template.replace("{{MSG}}", st.session_state.current_question), unsafe_allow_html=True)
-
 
 
 if __name__ == '__main__':
