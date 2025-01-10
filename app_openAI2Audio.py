@@ -10,42 +10,38 @@ from langchain.memory import ConversationBufferMemory
 from langchain.chains import ConversationalRetrievalChain
 from htmlTemplates import css, bot_template, user_template
 import openai
-import tempfile
 from audiorecorder import audiorecorder
 import io
 
-# Load environment variables
 load_dotenv()
 openai_api_key = os.getenv("OPENAI_API_KEY")
 openai.api_key = openai_api_key
 
-# Function to transcribe audio using OpenAI Whisper
-def transcribe_audio(audio_segment):
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_file:
-        # Export the AudioSegment to the temporary file
-        audio_segment.export(tmp_file.name, format="wav")
-        tmp_file_path = tmp_file.name
-
+# Function to transcribe audio using OpenAI Whisper with streaming
+def transcribe_audio_stream(audio_data):
     try:
-        with open(tmp_file_path, "rb") as audio_file:
-            response = openai.Audio.transcribe(
-                model="whisper-1",
-                file=audio_file,
-                response_format="text"
-            )
-            if isinstance(response, dict):
-                transcript = response.get('text', '')
-                print("Transcript:", transcript)
-            else:
-                transcript = response
-                print("Transcript:", transcript)
+        audio_file = io.BytesIO(audio_data)
+        
+        audio_file.name = 'audio.wav'
+        # print("Audio file: ",audio_file)
+        
+        response = openai.Audio.transcribe(
+            model="whisper-1",
+            file=audio_file,
+            response_format="text"
+        )
+        
+        print("Response:", response)
+        
+        transcript = str(response)
+        print("Transcript:", transcript)
         return transcript
+        
     except Exception as e:
         print(f"Error processing audio: {str(e)}")
         return None
-    finally:
-        os.unlink(tmp_file_path)
-        
+    
+    
 # Function to extract text from uploaded PDFs using PyPDF2
 def get_pdf_text(pdf_docs):
     text = ""
@@ -189,21 +185,19 @@ def main():
             st.session_state.current_question = st.session_state.initial_questions.pop(0)
             st.write(bot_template.replace("{{MSG}}", st.session_state.current_question), unsafe_allow_html=True)
 
-        # Audio recording section
         st.write("Record your answer:")
-        # Initialize the audio recorder
         recorder = audiorecorder("Click to record", "Recording...")
         
-        # Get the audio data
         audio_data = recorder
         
         if len(audio_data) > 0:
-            # Play the recorded audio
             st.audio(audio_data.export().read())
             
             try:
                 with st.spinner("Transcribing your response..."):
-                    user_answer = transcribe_audio(audio_data)
+                    # user_answer = transcribe_audio_stream(audio_data.export().read())
+                    audio_bytes = audio_data.export().read()
+                    user_answer = transcribe_audio_stream(audio_bytes)
                     st.write("Transcribed text:", user_answer)
                     
                     chat_history, score = handle_resume_interaction(
