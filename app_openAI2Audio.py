@@ -11,19 +11,36 @@ from langchain.chains import ConversationalRetrievalChain
 from htmlTemplates import css, bot_template, user_template
 import openai
 from audiorecorder import audiorecorder
+from pydub import AudioSegment
 import io
 
 load_dotenv()
 openai_api_key = os.getenv("OPENAI_API_KEY")
 openai.api_key = openai_api_key
 
-# Function to transcribe audio using OpenAI Whisper with streaming
+def compress_audio(audio_data):
+    """
+    Compress audio to reduce size without drastically affecting quality.
+    Uses pydub to reduce bitrate and file size.
+    """
+    try:
+        audio = AudioSegment.from_file(io.BytesIO(audio_data), format="wav")
+        compressed_audio = audio.set_frame_rate(16000).set_channels(1).set_sample_width(2)
+
+        byte_io = io.BytesIO()
+        compressed_audio.export(byte_io, format="wav")
+        byte_io.seek(0)  
+        return byte_io.read()
+    except Exception as e:
+        print(f"Error compressing audio: {str(e)}")
+        return audio_data
+
 def transcribe_audio_stream(audio_data):
     try:
-        audio_file = io.BytesIO(audio_data)
+        compressed_audio_data = compress_audio(audio_data)
         
+        audio_file = io.BytesIO(compressed_audio_data)
         audio_file.name = 'audio.wav'
-        # print("Audio file: ",audio_file)
         
         response = openai.Audio.transcribe(
             model="whisper-1",
@@ -32,16 +49,13 @@ def transcribe_audio_stream(audio_data):
         )
         
         print("Response:", response)
-        
-        transcript = str(response)
+        transcript = response
         print("Transcript:", transcript)
         return transcript
         
     except Exception as e:
         print(f"Error processing audio: {str(e)}")
         return None
-    
-    
 # Function to extract text from uploaded PDFs using PyPDF2
 def get_pdf_text(pdf_docs):
     text = ""
